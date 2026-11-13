@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>file.png</file>
+        <file>netdisk.png</file>
+    </qresource>
+</RCC>
