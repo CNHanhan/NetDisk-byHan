@@ -9,10 +9,10 @@ public:
     TCPServer();
     ~TCPServer();
 public:
-    // 服务器网络初始化
-    bool InitNetwork(char* ip = (char*)"127.0.0.1", u_short port = 8899);   // 加载库，创建套接字，绑定端口，监听
-    // 接收数据
-    bool RecvData(SOCKET sockWaiter);     // 通过处理粘包的方式接收数据
+    // 服务器网络初始化（加载库、创建套接字、绑定端口、监听）
+    bool InitNetwork(char* ip = (char*)"0.0.0.0", u_short port = 8899);
+    // 接收数据（处理粘包/半包）
+    bool RecvData(SOCKET sockWaiter);
     // 发送数据
     bool SendData(SOCKET sockWaiter, char* buf, int bufLen);
     // 卸载网络

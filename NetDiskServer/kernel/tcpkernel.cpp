@@ -17,9 +17,9 @@ TCPKernel::~TCPKernel()
 
 bool TCPKernel::open()
 {
-    if(!m_TCPNet->InitNetwork())
+    if(!m_TCPNet->InitNetwork((char*)SERVER_LISTEN_IP, SERVER_LISTEN_PORT))
         return false;
-    if(!m_SqlUtils->ConnectMysql("127.0.0.1","root","root","disk"))
+    if(!m_SqlUtils->ConnectMysql(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWD, MYSQL_DB))
         return false;
     return true;
 }
@@ -94,9 +94,13 @@ void TCPKernel::regRQ(SOCKET sock, char *buf)
         {
             std::string id = lst.front();
             lst.pop_front();
-            // 为用户创建目录          "D:\\disk\\" + 4
+            // 为用户创建目录
             sprintf(filePath, "%s%s", FILEPATHBASE, id.c_str());
+#ifdef _WIN32
             CreateDirectoryA(filePath, 0);
+#else
+            mkdir(filePath, 0777);
+#endif
         }
     }
     // 回复
@@ -499,7 +503,7 @@ void TCPKernel::deletefilerq(SOCKET sock, char *buf)
             // 文件引用计数小于等于1，删除该行文件记录，并且删除该文件
             sprintf(sql, "delete from file where f_id = %lld", psdr->fileId);
             m_SqlUtils->Update(sql);
-            DeleteFileA(lst.front().c_str());
+            remove(lst.front().c_str());
         }
 
         // 删除该用户分享这条文件的记录

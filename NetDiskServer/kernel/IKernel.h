@@ -1,6 +1,6 @@
 #ifndef IKERNEL_H
 #define IKERNEL_H
-#include <winsock2.h>
+#include "../server/INet.h"
 
 class IKernel
 {

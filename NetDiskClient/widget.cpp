@@ -1,5 +1,6 @@
 #include "widget.h"
 #include "ui_widget.h"
+#include "config.h"
 #include <QDebug>
 #include "./kernel/tcpkernel.h"
 #include "login.h"
@@ -26,8 +27,7 @@ Widget::Widget(QWidget *parent)
 {
     ui->setupUi(this);
     m_pKernel = new TCPKernel;
-    if (!m_pKernel->connectServer("16.178.208.229")) //AWS
-    //if (!m_pKernel->connectServer("127.0.0.1"))
+    if (!m_pKernel->connectServer(SERVER_IP, SERVER_PORT))
     {
         QMessageBox::critical(this,"错误","链接服务器失败！");
         return;

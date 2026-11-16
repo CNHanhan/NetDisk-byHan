@@ -14,6 +14,7 @@ SOURCES += \
     widget.cpp
 
 HEADERS += \
+    config.h \
     login.h \
     pack.h \
     widget.h

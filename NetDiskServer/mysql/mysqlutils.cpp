@@ -1,4 +1,5 @@
 ﻿#include "mysqlutils.h"
+#include "../config.h"
 
 MysqlUtils::MysqlUtils()
 {
@@ -18,7 +19,7 @@ MysqlUtils::~MysqlUtils()
 
 bool MysqlUtils::ConnectMysql(const char *host, const char *user, const char *passwd, const char *db)
 {
-    if(!mysql_real_connect(sock, host, user, passwd,db,3306,0,0))
+    if(!mysql_real_connect(sock, host, user, passwd,db,MYSQL_PORT,0,0))
     {
         return false;
     }
@@ -94,7 +95,7 @@ void MysqlUtils::HeadrtBeatLoop(MysqlUtils* pThis)
             pThis->DisConnect();
             if (!mysql_real_connect(pThis->sock, pThis->m_host.c_str(),
                                     pThis->m_user.c_str(),pThis->m_pwd.c_str(),
-                                    pThis->m_db.c_str(),3306,0,0))
+                                    pThis->m_db.c_str(),MYSQL_PORT,0,0))
             {
                 printf("reset mysql connect err\n");
             }

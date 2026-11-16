@@ -4,10 +4,17 @@
 #include "IKernel.h"
 #include "../server/tcpserver.h"
 #include "../mysql/mysqlutils.h"
+#include "../config.h"
 #include <list>
 #include <map>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
 
-#define FILEPATHBASE    "D:/disk/"
+#ifndef _WIN32
+#include <ctime>
+#include <sys/stat.h>
+#endif
 
 struct f_uploadInfo
 {
