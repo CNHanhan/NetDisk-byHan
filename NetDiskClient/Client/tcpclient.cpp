@@ -1,6 +1,8 @@
 ﻿#include "tcpclient.h"
 #include <thread>
 #include <stdio.h>
+#include <cstring>
+#include <ws2tcpip.h>   // TCP_NODELAY
 
 TCPClient::TCPClient(IKernel* pKernel) {
     m_SOCK = 0;
@@ -54,6 +56,16 @@ bool TCPClient::InitNetwork(const char *ip, u_short port)
         return false;
     }
 
+    // 关闭 Nagle 算法：否则每个 4KB 分包前那个 4 字节长度头都要等上一个包的 ACK，
+    // 高延迟链路上吞吐量会被压到 4096/RTT（200ms 就只剩下 20KB/s）
+    int nodelay = 1;
+    setsockopt(m_SOCK, IPPROTO_TCP, TCP_NODELAY, (const char*)&nodelay, sizeof(nodelay));
+
+    // 加大收发缓冲区，减少 send 阻塞等待
+    int bufSize = 256 * 1024;
+    setsockopt(m_SOCK, SOL_SOCKET, SO_SNDBUF, (const char*)&bufSize, sizeof(bufSize));
+    setsockopt(m_SOCK, SOL_SOCKET, SO_RCVBUF, (const char*)&bufSize, sizeof(bufSize));
+
 
     printf("connect Server\n");
     // 创建接收数据线程
@@ -75,50 +87,75 @@ void TCPClient::UnInitNetwork(const char *errmsg)
 
 bool TCPClient::RecvData()
 {
-    // 先接收包大小
+    // 1. 循环读满 4 字节包头（recv 可能只返回 1~3 字节，必须循环补齐）
     int len = 0;
-    int num = recv(m_SOCK, (char*)&len,sizeof(int), 0);
-
-    if (num > 0)
+    int offset = 0;
+    int left = sizeof(int);
+    while (left > 0)
     {
-        // 根据包大小在堆区开辟空间
-        char* szbuf = new char[len];
-        int offset = 0;
-        while(len)
+        int num = recv(m_SOCK, ((char*)&len) + offset, left, 0);
+        if (num <= 0)
         {
-            num = recv(m_SOCK, szbuf + offset, len, 0);
-            if (num > 0)
-            {
-                offset += num;
-                len -= num;
-            }
-            else
-            {
-                delete[] szbuf;
-                UnInitNetwork("recv err");
-                break;
-            }
+            UnInitNetwork("recv err");
+            return false;
         }
-        // 把数据交给kernel处理 todo
-        m_pKernel->dealData(szbuf);
-        delete[] szbuf;
-        return true;
+        offset += num;
+        left -= num;
     }
-    else
+
+    // 2. 校验包长度，防止垃圾长度导致 std::bad_alloc 闪退
+    if (len <= 0 || len > 1024 * 1024)
     {
-        UnInitNetwork("recv err");
+        printf("invalid packet len: %d\n", len);
         return false;
     }
+
+    // 3. 按长度读满整个包
+    char* szbuf = new char[len];
+    offset = 0;
+    left = len;
+    while (left > 0)
+    {
+        int num = recv(m_SOCK, szbuf + offset, left, 0);
+        if (num <= 0)
+        {
+            delete[] szbuf;
+            UnInitNetwork("recv err");
+            return false;
+        }
+        offset += num;
+        left -= num;
+    }
+
+    // 4. 交给 kernel 处理
+    m_pKernel->dealData(szbuf);
+    delete[] szbuf;
+    return true;
 }
 
 bool TCPClient::SendData(char *buf, int bufLen)
 {
-    // 第一次发送数据长度
-    if(send(m_SOCK, (char*)&bufLen, sizeof(int), 0) <= 0) return false;
-    // 发送真实数据
-    if(send(m_SOCK, buf, bufLen, 0) <= 0) return false;
+    // 把 4 字节长度头和包体拼成一次 send 发出：
+    // 分两次 write（小包 + 大包）会触发 Nagle 与延迟 ACK 互相等待，吞吐量暴跌
+    size_t total = sizeof(int) + (size_t)bufLen;
+    if (m_sendBuf.size() < total)
+        m_sendBuf.resize(total);
+
+    memcpy(m_sendBuf.data(), &bufLen, sizeof(int));
+    memcpy(m_sendBuf.data() + sizeof(int), buf, bufLen);
+
+    int offset = 0;
+    int left = (int)total;
+    while (left > 0)
+    {
+        int sent = send(m_SOCK, m_sendBuf.data() + offset, left, 0);
+        if (sent <= 0) return false;
+        offset += sent;
+        left -= sent;
+    }
     return true;
 }
+
 
 void TCPClient::ThreadRecv(TCPClient *pThis)
 {

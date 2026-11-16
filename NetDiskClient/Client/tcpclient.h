@@ -2,6 +2,7 @@
 #define TCPCLIENT_H
 #include "INet.h"
 #include "../kernel/IKernel.h"
+#include <vector>
 
 
 
@@ -21,6 +22,7 @@ public:
     bool SendData(char* buf, int bufLen);
 private:
     SOCKET m_SOCK;          // 本地套接字
+    std::vector<char> m_sendBuf;   // 封包缓冲区（长度头 + 包体一次发出）
     static void ThreadRecv(TCPClient* pThis); // 处理数据线程
     IKernel* m_pKernel;
 };

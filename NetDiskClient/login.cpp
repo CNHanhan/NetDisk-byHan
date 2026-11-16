@@ -57,3 +57,7 @@ void Login::on_login_clicked()
     m_pKernel->sendData((char*)&slr, sizeof(slr));
 }
 
+QString Login::getLoginUserName() const
+{
+    return ui->login_user->text();
+}

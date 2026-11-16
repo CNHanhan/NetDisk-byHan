@@ -48,7 +48,7 @@ private:
     MysqlUtils* m_SqlUtils;
     static IKernel* m_Kernel;
     std::list<f_uploadInfo*> m_lstuploadfileInfo;
-    std::map<SOCKET, char*> m_userList;
+    std::map<long long, SOCKET> m_mapIdToSock;
     void regRQ(SOCKET sock, char *buf);
     void loginRQ(SOCKET sock, char *buf);
     void getFileList(SOCKET sock, char *buf);
@@ -58,6 +58,10 @@ private:
     void sharedfilerq(SOCKET sock, char *buf);
     void importfilerq(SOCKET sock, char *buf);
     void deletefilerq(SOCKET sock, char *buf);
+    void addFriendRQ(SOCKET sock, char *buf);
+    void getFriendListRQ(SOCKET sock, char *buf);
+    void chatRQ(SOCKET sock, char *buf);
+
 };
 
 #endif // TCPKERNEL_H

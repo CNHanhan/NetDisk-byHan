@@ -19,7 +19,7 @@ bool TCPKernel::open()
 {
     if(!m_TCPNet->InitNetwork())
         return false;
-    if(!m_SqlUtils->ConnectMysql("127.0.0.1","root","123456","disk"))
+    if(!m_SqlUtils->ConnectMysql("127.0.0.1","root","root","disk"))
         return false;
     return true;
 }
@@ -60,6 +60,16 @@ void TCPKernel::dealData(SOCKET sock, char *buf)
     case PROTOCOL_DELETEFILE_RQ:   // 删除文件请求
         deletefilerq(sock, buf);
         break;
+    case PROTOCOL_ADDFRIEND_RQ:
+        addFriendRQ(sock, buf);
+        break;
+    case PROTOCOL_GETFRIENDLIST_RQ:
+        getFriendListRQ(sock, buf);
+        break;
+    case PROTOCOL_CHAT_RQ:
+        chatRQ(sock, buf);
+        break;
+
     }
 }
 
@@ -116,6 +126,8 @@ void TCPKernel::loginRQ(SOCKET sock, char *buf)
             // 密码正确
             slr.m_ret = LOGIN_SUC;
             slr.m_userId = atoll(id.c_str());
+            m_mapIdToSock[slr.m_userId] = sock; // 记录当前登录用户的在线 socket
+
         }
     }
     // 用户不存在
@@ -498,6 +510,115 @@ void TCPKernel::deletefilerq(SOCKET sock, char *buf)
 
 
 
+void TCPKernel::addFriendRQ(SOCKET sock, char *buf)
+{
+    STRU_ADDFRIEND_RQ* psar = (STRU_ADDFRIEND_RQ*)buf;
+    STRU_ADDFRIEND_RS sar;
+    memset(&sar, 0, sizeof(sar));
+    sar.m_type = PROTOCOL_ADDFRIEND_RS;
+    sar.m_ret = ADDFRIEND_NO_USER;
+
+    char sql[SQLLEN] = {0};
+    sprintf(sql, "select u_id from user where u_name = '%s'", psar->m_friendName);
+    std::list<std::string> lst;
+    m_SqlUtils->Select(sql, 1, lst);
+
+    if (!lst.empty())
+    {
+        long long friendId = atoll(lst.front().c_str());
+        lst.pop_front();
+        if (friendId == psar->m_userId)
+        {
+            sar.m_ret = ADDFRIEND_EXIST;
+        }
+        else
+        {
+            // 双向插入好友关系
+            sprintf(sql, "insert into friend(u_id1, u_id2) values(%lld, %lld)", psar->m_userId, friendId);
+            if (m_SqlUtils->Update(sql))
+            {
+                sprintf(sql, "insert into friend(u_id1, u_id2) values(%lld, %lld)", friendId, psar->m_userId);
+                m_SqlUtils->Update(sql);
+
+                sar.m_ret = ADDFRIEND_SUC;
+                sar.m_friendId = friendId;
+                strcpy(sar.m_friendName, psar->m_friendName);
+
+                // 如果对方此时也在线，实时通知对方刷新好友列表
+                auto it = m_mapIdToSock.find(friendId);
+                if (it != m_mapIdToSock.end())
+                {
+                    STRU_GETFRIENDLIST_RQ req;
+                    req.m_userId = friendId;
+                    getFriendListRQ(it->second, (char*)&req);
+                }
+            }
+            else
+            {
+                sar.m_ret = ADDFRIEND_EXIST;
+            }
+        }
+    }
+    m_TCPNet->SendData(sock, (char*)&sar, sizeof(sar));
+}
+
+void TCPKernel::getFriendListRQ(SOCKET sock, char *buf)
+{
+    STRU_GETFRIENDLIST_RQ* psgr = (STRU_GETFRIENDLIST_RQ*)buf;
+    char sql[SQLLEN] = {0};
+    sprintf(sql, "select u.u_id, u.u_name from friend f join user u on f.u_id2 = u.u_id where f.u_id1 = %lld", psgr->m_userId);
+    std::list<std::string> lst;
+    m_SqlUtils->Select(sql, 2, lst);
+
+    STRU_GETFRIENDLIST_RS sgr;
+    int i = 0;
+    while (!lst.empty())
+    {
+        std::string fId = lst.front(); lst.pop_front();
+        std::string fName = lst.front(); lst.pop_front();
+
+        sgr.m_friendInfo[i].m_friendId = atoll(fId.c_str());
+        strcpy(sgr.m_friendInfo[i].m_friendName, fName.c_str());
+        i++;
+        if (i == FILENUM || lst.empty())
+        {
+            sgr.m_friendNum = i;
+            m_TCPNet->SendData(sock, (char*)&sgr, sizeof(sgr));
+            i = 0;
+            memset(sgr.m_friendInfo, 0, sizeof(sgr.m_friendInfo));
+        }
+    }
+}
+
+void TCPKernel::chatRQ(SOCKET sock, char *buf)
+{
+    STRU_CHAT_RQ* pscr = (STRU_CHAT_RQ*)buf;
+    // 查询发送者的用户名填入包中
+    char sql[SQLLEN] = {0};
+    sprintf(sql, "select u_name from user where u_id = %lld", pscr->m_sendUserId);
+    std::list<std::string> lst;
+    m_SqlUtils->Select(sql, 1, lst);
+    if (!lst.empty())
+    {
+        strcpy(pscr->m_sendUserName, lst.front().c_str());
+    }
+
+    // 查找接收者是否在线
+    auto it = m_mapIdToSock.find(pscr->m_recvUserId);
+    if (it != m_mapIdToSock.end())
+    {
+        // 在线，直接把聊天包转发给接收者的 socket
+        m_TCPNet->SendData(it->second, (char*)pscr, sizeof(STRU_CHAT_RQ));
+    }
+    else
+    {
+        // 不在线，回复发送者
+        STRU_CHAT_RS crs;
+        crs.m_ret = CHAT_OFFLINE;
+        crs.m_recvUserId = pscr->m_recvUserId;
+        m_TCPNet->SendData(sock, (char*)&crs, sizeof(crs));
+    }
+}
 
 
 

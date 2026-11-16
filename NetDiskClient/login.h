@@ -17,6 +17,8 @@ public:
     explicit Login(QWidget *parent = nullptr);
     ~Login();
     void setKernel(IKernel* pKernel);
+    QString getLoginUserName() const;
+
 
 private slots:
     void on_reg_clicked();

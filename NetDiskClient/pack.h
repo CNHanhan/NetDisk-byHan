@@ -205,7 +205,7 @@ struct STRU_UPLOADFILESTREAM_RQ : public STUR_BASE
     long long m_userID;
     long long m_fileID;
     char m_Stream[ONEPAGE];
-    long m_StreamLen;
+    int m_StreamLen;
 };
 
 
@@ -235,7 +235,7 @@ struct STRU_DOWNLOADFILE_RS : public STUR_BASE
     }
     char m_ret;     // 是否可以下载
     char fileStream[ONEPAGE];
-    long fileStreamLen;
+    int fileStreamLen;
     long long fileSize;
     long long fileId;
 };
@@ -331,6 +331,74 @@ struct STRU_DELETEFILE_RQ : public STUR_BASE
 // 更新当前file表，删除这个文件所在行
 // 是——服务器真实要删除这个文件，DeleteFile()
 
+// ==================== 好友与聊天协议 ====================
+#define PROTOCOL_ADDFRIEND_RQ       (PROTOCOL_BASE + 18) // 添加好友请求
+#define PROTOCOL_ADDFRIEND_RS       (PROTOCOL_BASE + 19) // 添加好友回复
+#define PROTOCOL_GETFRIENDLIST_RQ   (PROTOCOL_BASE + 20) // 获取好友列表请求
+#define PROTOCOL_GETFRIENDLIST_RS   (PROTOCOL_BASE + 21) // 获取好友列表回复
+#define PROTOCOL_CHAT_RQ            (PROTOCOL_BASE + 22) // 聊天消息请求（服务端直接转发）
+#define PROTOCOL_CHAT_RS            (PROTOCOL_BASE + 23) // 聊天消息回复（对方不在线提示）
+
+// 1. 添加好友请求包
+struct STRU_ADDFRIEND_RQ : public STUR_BASE
+{
+    STRU_ADDFRIEND_RQ() { m_type = PROTOCOL_ADDFRIEND_RQ; }
+    long long m_userId;            // 自己的用户ID
+    char m_friendName[MAXSIZE];    // 要添加的好友用户名
+};
+
+#define ADDFRIEND_SUC       0   // 添加成功
+#define ADDFRIEND_NO_USER   1   // 用户不存在
+#define ADDFRIEND_EXIST     2   // 已经是好友或不能加自己
+// 添加好友回复包
+struct STRU_ADDFRIEND_RS : public STUR_BASE
+{
+    STRU_ADDFRIEND_RS() { m_type = PROTOCOL_ADDFRIEND_RS; }
+    char m_ret;
+    long long m_friendId;
+    char m_friendName[MAXSIZE];
+};
+
+// 2. 获取好友列表请求包
+struct STRU_GETFRIENDLIST_RQ : public STUR_BASE
+{
+    STRU_GETFRIENDLIST_RQ() { m_type = PROTOCOL_GETFRIENDLIST_RQ; }
+    long long m_userId;
+};
+
+struct FRIENDINFO
+{
+    long long m_friendId;
+    char m_friendName[MAXSIZE];
+};
+
+// 获取好友列表回复包（每次发1个好友信息，和文件列表机制一致）
+struct STRU_GETFRIENDLIST_RS : public STUR_BASE
+{
+    STRU_GETFRIENDLIST_RS() { m_type = PROTOCOL_GETFRIENDLIST_RS; }
+    FRIENDINFO m_friendInfo[FILENUM];
+    int m_friendNum;
+};
+
+// 3. 聊天请求/转发包
+#define CHATLEN 512
+struct STRU_CHAT_RQ : public STUR_BASE
+{
+    STRU_CHAT_RQ() { m_type = PROTOCOL_CHAT_RQ; }
+    long long m_sendUserId;
+    char m_sendUserName[MAXSIZE];
+    long long m_recvUserId;
+    char m_content[CHATLEN];
+};
+
+#define CHAT_SUC        0
+#define CHAT_OFFLINE    1
+struct STRU_CHAT_RS : public STUR_BASE
+{
+    STRU_CHAT_RS() { m_type = PROTOCOL_CHAT_RS; }
+    char m_ret;
+    long long m_recvUserId;
+};
 
 
 

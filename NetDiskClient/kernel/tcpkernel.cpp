@@ -49,6 +49,19 @@ void TCPKernel::dealData(char* buf)
     case PROTOCOL_IMPORTFILE_RS:           // 导入文件信息回复
         emit signal_importfilers((STRU_IMPORTFILE_RS*)buf);
         break;
+    case PROTOCOL_ADDFRIEND_RS:
+        emit signal_addfriendrs((STRU_ADDFRIEND_RS*)buf);
+        break;
+    case PROTOCOL_GETFRIENDLIST_RS:
+        emit signal_friendlistrs((STRU_GETFRIENDLIST_RS*)buf);
+        break;
+    case PROTOCOL_CHAT_RQ:
+        emit signal_chatrq((STRU_CHAT_RQ*)buf);
+        break;
+    case PROTOCOL_CHAT_RS:
+        emit signal_chatrs((STRU_CHAT_RS*)buf);
+        break;
+
     }
 }
 

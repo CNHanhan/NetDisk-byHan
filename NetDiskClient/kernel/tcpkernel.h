@@ -29,6 +29,10 @@ signals:
     void signal_downloadfilers(STRU_DOWNLOADFILE_RS*);
     void signal_sharedfilers(STRU_SHAREDFILE_RS*);
     void signal_importfilers(STRU_IMPORTFILE_RS*);
+    void signal_addfriendrs(STRU_ADDFRIEND_RS*);
+    void signal_friendlistrs(STRU_GETFRIENDLIST_RS*);
+    void signal_chatrq(STRU_CHAT_RQ*);
+    void signal_chatrs(STRU_CHAT_RS*);
 
 
 private:
