@@ -12,7 +12,8 @@ typedef int SOCKET;
 typedef unsigned short u_short;
 #define INVALID_SOCKET (-1)
 #define SOCKET_ERROR   (-1)
-#define closesocket(s) close(s)
+// 加 :: 前缀：避免在含 close() 成员函数的类里被解析成成员函数（名字隐藏）
+#define closesocket(s) ::close(s)
 #endif
 
 class INet
