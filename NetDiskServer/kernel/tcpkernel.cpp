@@ -37,47 +37,71 @@ void TCPKernel::close()
     m_SqlUtils->DisConnect();
 }
 
-void TCPKernel::dealData(SOCKET sock, char *buf)
+void TCPKernel::dealData(SOCKET sock, char *buf, int len)
 {
+    // 校验包体长度是否与本端结构体一致。
+    // 两端 pack.h 不同步（比如用了 long / 加了字段）时，这里会立刻打印出来，
+    // 而不是“静默错位”导致功能看起来卡死。
+#define CHECK_PACK_LEN(T) \
+    if (len != (int)sizeof(T)) { \
+        printf("packet len mismatch, type=%d, got=%d, expect=%d\n", \
+               (int)(unsigned char)*buf, len, (int)sizeof(T)); \
+        fflush(stdout); \
+        return; \
+    }
+
     switch (*buf) {
     case PROTOCOL_REG_RQ:   // 注册请求
+        CHECK_PACK_LEN(STRU_REG_RQ);
         regRQ(sock, buf);
         break;
     case PROTOCOL_LOGIN_RQ:   // 登录请求
+        CHECK_PACK_LEN(STRU_LOGIN_RQ);
         loginRQ(sock, buf);
         break;
     case PROTOCOL_GETFILELIST_RQ:   // 获取文件列表请求
+        CHECK_PACK_LEN(STRU_GETFILELIST_RQ);
         getFileList(sock, buf);
         break;
     case PROTOCOL_UPLOADFILEINFO_RQ:   // 上传文件信息请求
+        CHECK_PACK_LEN(STRU_UPLOADFILEINFO_RQ);
         uploadFileInforq(sock, buf);
         break;
     case PROTOCOL_UPLOADFILEBLOCK_RQ:   // 上传文件流
+        CHECK_PACK_LEN(STRU_UPLOADFILESTREAM_RQ);
         uploadFilestreamrq(sock, buf);
         break;
     case PROTOCOL_DOWNLOADFILE_RQ:   // 下载文件请求
+        CHECK_PACK_LEN(STRU_DOWNLOADFILE_RQ);
         downloadfilerq(sock, buf);
         break;
     case PROTOCOL_SHAREDFILE_RQ:   // 分享文件请求
+        CHECK_PACK_LEN(STRU_SHAREDFILE_RQ);
         sharedfilerq(sock, buf);
         break;
     case PROTOCOL_IMPORTFILE_RQ:   // 提取文件请求
+        CHECK_PACK_LEN(STRU_IMPORTFILE_RQ);
         importfilerq(sock, buf);
         break;
     case PROTOCOL_DELETEFILE_RQ:   // 删除文件请求
+        CHECK_PACK_LEN(STRU_DELETEFILE_RQ);
         deletefilerq(sock, buf);
         break;
     case PROTOCOL_ADDFRIEND_RQ:
+        CHECK_PACK_LEN(STRU_ADDFRIEND_RQ);
         addFriendRQ(sock, buf);
         break;
     case PROTOCOL_GETFRIENDLIST_RQ:
+        CHECK_PACK_LEN(STRU_GETFRIENDLIST_RQ);
         getFriendListRQ(sock, buf);
         break;
     case PROTOCOL_CHAT_RQ:
+        CHECK_PACK_LEN(STRU_CHAT_RQ);
         chatRQ(sock, buf);
         break;
-
     }
+
+#undef CHECK_PACK_LEN
 }
 
 void TCPKernel::regRQ(SOCKET sock, char *buf)

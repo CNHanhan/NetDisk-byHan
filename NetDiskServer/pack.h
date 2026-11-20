@@ -219,7 +219,7 @@ struct STRU_DOWNLOADFILE_RS : public STUR_BASE
     }
     char m_ret;     // 是否可以下载
     char fileStream[ONEPAGE];
-    long fileStreamLen;
+    int fileStreamLen;    // 不能用 long：Linux x64 为 8 字节，Windows 为 4 字节
     long long fileSize;
     long long fileId;
 };

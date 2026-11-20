@@ -126,8 +126,8 @@ bool TCPServer::RecvData(SOCKET sockWaiter)
         }
     }
 
-    // 4. 交给 kernel 处理
-    TCPKernel::getKernel()->dealData(sockWaiter, szbuf);
+    // 交给 kernel 处理（把长度一起传进去，便于校验结构体大小是否一致）
+    TCPKernel::getKernel()->dealData(sockWaiter, szbuf, len);
     delete[] szbuf;
     return true;
 }

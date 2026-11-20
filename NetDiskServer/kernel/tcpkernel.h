@@ -40,7 +40,7 @@ public:
     // 关闭服务器
     virtual void close();
     // 处理数据
-    virtual void dealData(SOCKET sock, char* buf);
+    virtual void dealData(SOCKET sock, char* buf, int len);
     // 单例模式获取当前类地址
     // 懒汉模式——不支持线程安全
     // 饿汉模式

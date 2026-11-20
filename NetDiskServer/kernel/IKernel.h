@@ -10,7 +10,7 @@ public:
 public:
     virtual bool open() = 0;
     virtual void close() = 0;
-    virtual void dealData(SOCKET sock, char* buf) = 0;
+    virtual void dealData(SOCKET sock, char* buf, int len) = 0;
 };
 
 #endif // IKERNEL_H
