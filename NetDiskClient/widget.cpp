@@ -17,6 +17,7 @@
 #include <QElapsedTimer>
 #include <QCoreApplication>
 #include <QProgressBar>
+#include <QColor>
 #include <deque>
 
 
@@ -69,6 +70,7 @@ Widget::Widget(QWidget *parent)
     connect((TCPKernel*)m_pKernel, &TCPKernel::signal_friendlistrs, this, &Widget::slots_friendlistrs, Qt::BlockingQueuedConnection);
     connect((TCPKernel*)m_pKernel, &TCPKernel::signal_chatrq, this, &Widget::slots_chatrq, Qt::BlockingQueuedConnection);
     connect((TCPKernel*)m_pKernel, &TCPKernel::signal_chatrs, this, &Widget::slots_chatrs, Qt::BlockingQueuedConnection);
+    connect((TCPKernel*)m_pKernel, &TCPKernel::signal_friendstatusrs, this, &Widget::slots_friendstatusrs, Qt::BlockingQueuedConnection);
 
 
     connect((TCPKernel*)m_pKernel,&TCPKernel::signal_uploadfileinfors, this, &Widget::slots_uploadfileinfors,Qt::BlockingQueuedConnection);
@@ -100,8 +102,6 @@ void Widget::slots_loginrs(STRU_LOGIN_RS * pslr)
 
     m_pLogin->setAttribute(Qt::WA_QuitOnClose, false);
     m_pLogin->close();
-
-    m_pLogin->close();
     delete m_pLogin;
 
     // 显示主窗口
@@ -112,6 +112,11 @@ void Widget::slots_loginrs(STRU_LOGIN_RS * pslr)
     STRU_GETFILELIST_RQ sgr;
     sgr.m_userId = m_userId;
     m_pKernel->sendData((char*)&sgr, sizeof(sgr));
+
+    // 请求当前用户的好友列表（漏了这一句，好友列表会一直是空的）
+    STRU_GETFRIENDLIST_RQ fgr;
+    fgr.m_userId = m_userId;
+    m_pKernel->sendData((char*)&fgr, sizeof(fgr));
 }
 
 void Widget::slots_filelistrs(STRU_GETFILELIST_RS * psgr)
@@ -287,17 +292,21 @@ void Widget::slots_uploadfileinfors(STRU_UPLOADFILEINFO_RS *psur)
                                         ? QString::asprintf("%.2f MB/s", smoothSpeedKB / 1024.0)
                                         : QString::asprintf("%.1f KB/s", smoothSpeedKB);
 
-                progressBar->setValue(pct);
-                progressBar->setFormat(QString("%1% (%2)").arg(pct).arg(speedText));
+                // 不保存控件指针，每次从表格里取当下的进度条，控件被销毁也不会野指针
+                QProgressBar* bar = nullptr;
+                if(row >= 0 && row < ui->tableWidget->rowCount())
+                    bar = qobject_cast<QProgressBar*>(ui->tableWidget->cellWidget(row, 3));
+                if(bar)
+                {
+                    bar->setValue(pct);
+                    bar->setFormat(QString("%1% (%2)").arg(pct).arg(speedText));
+                }
                 QCoreApplication::processEvents(); // 刷新 UI
             }
         }
 
         // 5. 上传完毕，移除进度条并显示“上传成功”
-        ui->tableWidget->removeCellWidget(row, 3);
-        QTableWidgetItem* doneItem = new QTableWidgetItem("上传成功");
-        doneItem->setFlags(doneItem->flags() & ~Qt::ItemIsEditable);
-        ui->tableWidget->setItem(row, 3, doneItem);
+        showStatusText(row, "上传成功");
 
     }
     break;
@@ -453,7 +462,8 @@ void Widget::on_btn_uploadfile_clicked()
     if(!strcmp("", filePath.toStdString().c_str())) return;
     QString fileName = filePath.section('/', -1);
     // 获取文件名字
-    strcpy(sur.m_fileinfo.m_filename, fileName.toStdString().c_str());
+    strncpy(sur.m_fileinfo.m_filename, fileName.toUtf8().constData(), MAXSIZE - 1);
+    sur.m_fileinfo.m_filename[MAXSIZE - 1] = '\0';
     long long fileSize = 0;
     // 获取文件大小
     {
@@ -465,17 +475,22 @@ void Widget::on_btn_uploadfile_clicked()
     sur.m_fileinfo.m_filesize = fileSize;
     // 获取文件MD5值
     std::string md5 = MD5::getFileMD5(filePath.toStdString());
-    strcpy(sur.m_md5, md5.c_str());
+    strncpy(sur.m_md5, md5.c_str(), MAXSIZE - 1);
+    sur.m_md5[MAXSIZE - 1] = '\0';
     sur.m_userId = m_userId;
     // 获取当前时间
     strcpy(sur.m_fileinfo.m_uploadtime, QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString().c_str());
     // 发送
     m_pKernel->sendData((char*)&sur, sizeof(sur));
     f_info* p = new f_info;
-    strcpy(p->fileName, fileName.toStdString().c_str());
-    strcpy(p->filePath, filePath.toStdString().c_str());
-    strcpy(p->md5, md5.c_str());
-    strcpy(p->uploadtime, sur.m_fileinfo.m_uploadtime);
+    strncpy(p->fileName, fileName.toUtf8().constData(), MAXSIZE - 1);
+    p->fileName[MAXSIZE - 1] = '\0';
+    strncpy(p->filePath, filePath.toUtf8().constData(), MAX_PATH - 1);
+    p->filePath[MAX_PATH - 1] = '\0';
+    strncpy(p->md5, md5.c_str(), MAXSIZE - 1);
+    p->md5[MAXSIZE - 1] = '\0';
+    strncpy(p->uploadtime, sur.m_fileinfo.m_uploadtime, MAXSIZE - 1);
+    p->uploadtime[MAXSIZE - 1] = '\0';
     p->pos = 0;
     p->fileSize = fileSize;
     m_lstFileInfo.push_back(p);
@@ -684,12 +699,11 @@ void Widget::slots_addfriendrs(STRU_ADDFRIEND_RS *psar)
     } else if (psar->m_ret == ADDFRIEND_SUC) {
         QString fname = QString::fromUtf8(psar->m_friendName);
         QMessageBox::information(this, "提示", QString("添加好友 [%1] 成功！").arg(fname));
-        if (m_mapFriends.find(psar->m_friendId) == m_mapFriends.end()) {
-            m_mapFriends[psar->m_friendId] = fname;
-            QListWidgetItem* item = new QListWidgetItem(fname);
-            item->setData(Qt::UserRole, QVariant::fromValue(psar->m_friendId));
-            m_pFriendListWidget->addItem(item);
-        }
+
+        m_mapFriends[psar->m_friendId] = fname;
+        if (m_mapFriendOnline.find(psar->m_friendId) == m_mapFriendOnline.end())
+            m_mapFriendOnline[psar->m_friendId] = 0;
+        refreshFriendItem(psar->m_friendId);
     }
 }
 
@@ -698,13 +712,66 @@ void Widget::slots_friendlistrs(STRU_GETFRIENDLIST_RS *psgr)
     for (int i = 0; i < psgr->m_friendNum; i++) {
         long long fid = psgr->m_friendInfo[i].m_friendId;
         QString fname = QString::fromUtf8(psgr->m_friendInfo[i].m_friendName);
-        if (m_mapFriends.find(fid) == m_mapFriends.end()) {
-            m_mapFriends[fid] = fname;
-            QListWidgetItem* item = new QListWidgetItem(fname);
-            item->setData(Qt::UserRole, QVariant::fromValue(fid));
-            m_pFriendListWidget->addItem(item);
+
+        m_mapFriends[fid] = fname;
+        m_mapFriendOnline[fid] = psgr->m_friendInfo[i].m_online ? 1 : 0;
+        refreshFriendItem(fid);
+    }
+}
+
+// 根据在线状态刷新（必要时新建）好友列表项
+void Widget::refreshFriendItem(long long friendId)
+{
+    if (!m_pFriendListWidget) return;
+
+    QListWidgetItem* item = nullptr;
+    for (int i = 0; i < m_pFriendListWidget->count(); i++)
+    {
+        QListWidgetItem* it = m_pFriendListWidget->item(i);
+        if (it && it->data(Qt::UserRole).toLongLong() == friendId)
+        {
+            item = it;
+            break;
         }
     }
+    if (!item)
+    {
+        item = new QListWidgetItem;
+        item->setData(Qt::UserRole, QVariant::fromValue(friendId));
+        m_pFriendListWidget->addItem(item);
+    }
+
+    bool online = (m_mapFriendOnline[friendId] != 0);
+    QString name = m_mapFriends[friendId];
+
+    item->setText(QString("%1 %2（%3）")
+                      .arg(online ? "●" : "○")
+                      .arg(name)
+                      .arg(online ? "在线" : "离线"));
+    item->setForeground(online ? QColor(0x2e, 0xcc, 0x71) : QColor(0x95, 0xa5, 0xa6));
+}
+
+// 服务端推送的上下线通知
+void Widget::slots_friendstatusrs(STRU_FRIENDSTATUS_RS *pfsr)
+{
+    long long fid = pfsr->m_friendId;
+    int online = pfsr->m_online ? 1 : 0;
+
+    if (m_mapFriends.find(fid) == m_mapFriends.end()) return;   // 不是我的好友
+    if (m_mapFriendOnline[fid] == online) return;               // 状态没变化
+
+    m_mapFriendOnline[fid] = online;
+    refreshFriendItem(fid);
+
+    // 在聊天记录里留一条系统提示
+    QString timeStr = QDateTime::currentDateTime().toString("hh:mm:ss");
+    QString name = m_mapFriends[fid];
+    m_mapChatHistory[fid] += QString("<p><font color='gray'><i>[%1] %2 %3</i></font></p>")
+                                 .arg(timeStr, name, online ? "上线了" : "下线了");
+
+    QListWidgetItem* cur = m_pFriendListWidget->currentItem();
+    if (cur && cur->data(Qt::UserRole).toLongLong() == fid)
+        m_pChatHistoryView->setHtml(m_mapChatHistory[fid]);
 }
 
 void Widget::slot_sendChatMsg()
@@ -739,13 +806,10 @@ void Widget::slots_chatrq(STRU_CHAT_RQ *pscr)
     QString senderName = QString::fromUtf8(pscr->m_sendUserName);
     QString content = QString::fromUtf8(pscr->m_content);
 
-    // 如果发送者不在本地好友列表中，自动加入列表
-    if (m_mapFriends.find(senderId) == m_mapFriends.end()) {
-        m_mapFriends[senderId] = senderName;
-        QListWidgetItem* item = new QListWidgetItem(senderName);
-        item->setData(Qt::UserRole, QVariant::fromValue(senderId));
-        m_pFriendListWidget->addItem(item);
-    }
+    // 能发来消息说明对方在线，顺便刷新列表
+    m_mapFriends[senderId] = senderName;
+    m_mapFriendOnline[senderId] = 1;
+    refreshFriendItem(senderId);
 
     QString timeStr = QDateTime::currentDateTime().toString("hh:mm:ss");
     m_mapChatHistory[senderId] += QString("<p><font color='green'><b>%1 [%2]:</b></font><br>%3</p>")
@@ -764,6 +828,14 @@ void Widget::slots_chatrs(STRU_CHAT_RS *pscr)
 {
     if (pscr->m_ret == CHAT_OFFLINE) {
         long long fid = pscr->m_recvUserId;
+
+        // 对方不在线，顺便把列表状态改成离线
+        if (m_mapFriends.find(fid) != m_mapFriends.end())
+        {
+            m_mapFriendOnline[fid] = 0;
+            refreshFriendItem(fid);
+        }
+
         m_mapChatHistory[fid] += "<p><font color='gray'><i>[系统提示：对方当前不在线]</i></font></p>";
         QListWidgetItem* cur = m_pFriendListWidget->currentItem();
         if (cur && cur->data(Qt::UserRole).toLongLong() == fid) {

@@ -3,11 +3,22 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <exception>
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #else
 #include <netinet/tcp.h>
+// 向已关闭的连接写入时不产生 SIGPIPE（否则会直接杀掉整个进程）
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+#endif
+
+#ifdef _WIN32
+#define SEND_FLAGS 0
+#else
+#define SEND_FLAGS MSG_NOSIGNAL
 #endif
 
 TCPServer::TCPServer() {
@@ -123,22 +134,24 @@ bool TCPServer::RecvData(SOCKET sockWaiter)
 
 bool TCPServer::SendData(SOCKET sockWaiter, char *buf, int bufLen)
 {
-    // 把 4 字节长度头和包体拼成一次 send：两次 write（小包 + 大包）
-    // 会触发 Nagle 算法与延迟 ACK 互相等待，高延迟链路上吞吐会暴跌
-    static thread_local std::vector<char> sendBuf;
-
-    size_t total = sizeof(int) + (size_t)bufLen;
-    if (sendBuf.size() < total)
-        sendBuf.resize(total);
-
-    memcpy(sendBuf.data(), &bufLen, sizeof(int));
-    memcpy(sendBuf.data() + sizeof(int), buf, bufLen);
+    // 不用 thread_local / 不临时分配堆内存：避免 MinGW 下线程退出清理 TLS 时的堆损坏
+    // Nagle 已关闭，分两次 send 不会产生延迟
 
     int offset = 0;
-    int left = (int)total;
+    int left = sizeof(bufLen);
     while (left > 0)
     {
-        int sent = send(sockWaiter, sendBuf.data() + offset, left, 0);
+        int sent = send(sockWaiter, ((char*)&bufLen) + offset, left, SEND_FLAGS);
+        if (sent <= 0) return false;
+        offset += sent;
+        left -= sent;
+    }
+
+    offset = 0;
+    left = bufLen;
+    while (left > 0)
+    {
+        int sent = send(sockWaiter, buf + offset, left, SEND_FLAGS);
         if (sent <= 0) return false;
         offset += sent;
         left -= sent;
@@ -161,24 +174,47 @@ void TCPServer::UninitNetwork(char *errmsg)
 
 void TCPServer::ThreadProc(TCPServer* pThis, SOCKET sockWaiter)
 {
+    // MySQL C API 要求：每个使用数据库的线程先做线程级初始化
+    MysqlUtils::threadInit();
+
     while(1)
     {
-        if(!pThis->RecvData(sockWaiter))    // 如果当前接收数据失败，则退出线程
+        try
+        {
+            if(!pThis->RecvData(sockWaiter))    // 如果当前接收数据失败，则退出线程
+                break;
+        }
+        catch (const std::exception& e)
+        {
+            // 没捕获的异常会让 std::terminate 直接结束整个进程
+            printf("thread exception: %s\n", e.what());
+            fflush(stdout);
             break;
+        }
+        catch (...)
+        {
+            printf("thread unknown exception\n");
+            fflush(stdout);
+            break;
+        }
     }
-    closesocket(sockWaiter);
+
+    // 连接断开：清理在线表、关闭 socket（在锁内）并向好友推送下线状态
+    TCPKernel::onSocketClosed(sockWaiter);
+
+    MysqlUtils::threadEnd();
 }
 
 void TCPServer::ThreadAccept(TCPServer *pThis)
 {
-    sockaddr_in clientAddr;
-#ifdef _WIN32
-    int size = sizeof(clientAddr);
-#else
-    socklen_t size = sizeof(clientAddr);
-#endif
     while(1)
     {
+        sockaddr_in clientAddr;
+#ifdef _WIN32
+        int size = sizeof(clientAddr);
+#else
+        socklen_t size = sizeof(clientAddr);
+#endif
         SOCKET sockwaiter = accept(pThis->m_SOCK, (sockaddr*)&clientAddr, &size);
         if (sockwaiter == INVALID_SOCKET)
             continue;

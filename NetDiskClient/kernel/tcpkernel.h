@@ -33,6 +33,7 @@ signals:
     void signal_friendlistrs(STRU_GETFRIENDLIST_RS*);
     void signal_chatrq(STRU_CHAT_RQ*);
     void signal_chatrs(STRU_CHAT_RS*);
+    void signal_friendstatusrs(STRU_FRIENDSTATUS_RS*);
 
 
 private:

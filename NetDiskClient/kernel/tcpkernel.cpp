@@ -61,6 +61,9 @@ void TCPKernel::dealData(char* buf)
     case PROTOCOL_CHAT_RS:
         emit signal_chatrs((STRU_CHAT_RS*)buf);
         break;
+    case PROTOCOL_FRIENDSTATUS_RS:
+        emit signal_friendstatusrs((STRU_FRIENDSTATUS_RS*)buf);
+        break;
 
     }
 }

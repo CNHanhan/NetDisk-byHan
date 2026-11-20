@@ -354,6 +354,7 @@ struct FRIENDINFO
 {
     long long m_friendId;
     char m_friendName[MAXSIZE];
+    int m_online;               // 1 在线，0 离线（服务端填写）
 };
 
 // 获取好友列表回复包（每次发1个好友信息，和文件列表机制一致）
@@ -382,6 +383,16 @@ struct STRU_CHAT_RS : public STUR_BASE
     STRU_CHAT_RS() { m_type = PROTOCOL_CHAT_RS; }
     char m_ret;
     long long m_recvUserId;
+};
+
+// ==================== 好友上下线通知（服务端主动推送） ====================
+#define PROTOCOL_FRIENDSTATUS_RS    (PROTOCOL_BASE + 24)
+
+struct STRU_FRIENDSTATUS_RS : public STUR_BASE
+{
+    STRU_FRIENDSTATUS_RS() { m_type = PROTOCOL_FRIENDSTATUS_RS; }
+    long long m_friendId;       // 状态变化的用户
+    int m_online;               // 1 上线，0 下线
 };
 
 

@@ -68,6 +68,8 @@ private:
     QLineEdit* m_pChatInputEdit;
     std::map<long long, QString> m_mapFriends;       // friendId -> friendName
     std::map<long long, QString> m_mapChatHistory;   // friendId -> 聊天记录HTML
+    std::map<long long, int> m_mapFriendOnline;      // friendId -> 1 在线 / 0 离线
+    void refreshFriendItem(long long friendId);      // 根据在线状态刷新列表项显示
     void initChatDialog();
     QLabel* m_pUserNameLabel;
     // 把表格第 row 行的“文件状态”列设置为纯文本（不可编辑）
@@ -89,6 +91,7 @@ public slots:
     void slots_friendlistrs(STRU_GETFRIENDLIST_RS*);
     void slots_chatrq(STRU_CHAT_RQ*);
     void slots_chatrs(STRU_CHAT_RS*);
+    void slots_friendstatusrs(STRU_FRIENDSTATUS_RS*);
 
 private slots:
     void on_btn_uploadfile_clicked();

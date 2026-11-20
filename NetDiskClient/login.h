@@ -25,6 +25,10 @@ private slots:
 
     void on_login_clicked();
 
+    // 登录页 / 注册页切换
+    void on_btn_goRegister_clicked();
+    void on_btn_goLogin_clicked();
+
 public slots:
     void slots_regrs(STRU_REG_RS*);
 

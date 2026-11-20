@@ -7,6 +7,7 @@
 #include "../config.h"
 #include <list>
 #include <map>
+#include <mutex>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -49,13 +50,23 @@ public:
         //     m_Kernel = new TCPKernel;
         return m_Kernel;
     }
+    // 连接断开时由 tcpserver 调用：清理在线表并通知其好友下线
+    static void onSocketClosed(SOCKET sock);
 
 private:
     INet* m_TCPNet;
     MysqlUtils* m_SqlUtils;
     static IKernel* m_Kernel;
     std::list<f_uploadInfo*> m_lstuploadfileInfo;
-    std::map<long long, SOCKET> m_mapIdToSock;
+    std::map<long long, SOCKET> m_mapIdToSock;      // userId -> socket
+    std::map<SOCKET, long long> m_mapSockToId;      // socket -> userId
+    std::mutex m_mutexOnline;                       // 保护上面两张表（多连接线程）
+    std::mutex m_mutexUpload;                       // 保护 m_lstuploadfileInfo（多连接线程）
+
+    bool isOnline(long long userId);
+    void pushFriendStatus(long long userId, int online);
+    // 在锁内给指定用户发送数据，避免与「对端刚好在关闭连接」发生竞争
+    bool sendToUser(long long userId, char* buf, int len);
     void regRQ(SOCKET sock, char *buf);
     void loginRQ(SOCKET sock, char *buf);
     void getFileList(SOCKET sock, char *buf);
